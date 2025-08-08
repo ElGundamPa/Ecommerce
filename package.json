@@ -1,0 +1,21 @@
+{
+  "name": "ecommerce-mvp",
+  "version": "2.0.0",
+  "description": "Ecommerce MVP with React, Node.js, and MongoDB",
+  "main": "index.js",
+  "scripts": {
+    "start": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "backend": "cd backend && npm run dev",
+    "frontend": "cd frontend && npm start",
+    "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "seed": "cd backend && npm run seed",
+    "test": "cd backend && npm test",
+    "build": "cd frontend && npm run build"
+  },
+  "keywords": ["ecommerce", "react", "nodejs", "mongodb", "fullstack"],
+  "author": "ElGundamPa",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
