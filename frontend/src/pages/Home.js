@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MagnifyingGlass, 
@@ -8,17 +8,13 @@ import {
   XMarkIcon
 } from '@heroicons/react/24/outline';
 import ProductCard from '../components/ProductCard';
-import { productService } from '../services/api';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Button from '../components/ui/Button';
 import { cn } from '../utils/cn';
+import { useProducts, useCategories } from '../hooks/useProducts';
+import { QueryErrorBoundary } from '../components/ErrorBoundary';
 
 const Home = () => {
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -26,55 +22,34 @@ const Home = () => {
   const [maxPrice, setMaxPrice] = useState('');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' o 'list'
 
-  // Cargar productos y categorías
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const [productsData, categoriesData] = await Promise.all([
-          productService.getAll(),
-          productService.getCategories()
-        ]);
-        
-        setProducts(productsData.data);
-        setCategories(categoriesData.data);
-      } catch (err) {
-        setError('Error cargando productos. Por favor, intenta de nuevo.');
-        console.error('Error loading products:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
-  }, []);
-
-  // Aplicar filtros
-  useEffect(() => {
-    const applyFilters = async () => {
-      try {
-        setLoading(true);
-        const filters = {};
-        
-        if (searchTerm) filters.search = searchTerm;
-        if (selectedCategory) filters.category = selectedCategory;
-        if (minPrice) filters.minPrice = minPrice;
-        if (maxPrice) filters.maxPrice = maxPrice;
-
-        const response = await productService.getAll(filters);
-        setProducts(response.data);
-      } catch (err) {
-        setError('Error aplicando filtros. Por favor, intenta de nuevo.');
-        console.error('Error applying filters:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    // Debounce para evitar muchas llamadas a la API
-    const timeoutId = setTimeout(applyFilters, 500);
-    return () => clearTimeout(timeoutId);
+  // Preparar filtros para React Query
+  const filters = useMemo(() => {
+    const queryFilters = {};
+    if (searchTerm) queryFilters.search = searchTerm;
+    if (selectedCategory) queryFilters.category = selectedCategory;
+    if (minPrice) queryFilters.minPrice = parseFloat(minPrice);
+    if (maxPrice) queryFilters.maxPrice = parseFloat(maxPrice);
+    return queryFilters;
   }, [searchTerm, selectedCategory, minPrice, maxPrice]);
+
+  // React Query hooks
+  const { 
+    data: productsData, 
+    isLoading: productsLoading, 
+    error: productsError,
+    refetch: refetchProducts
+  } = useProducts(filters);
+
+  const { 
+    data: categories, 
+    isLoading: categoriesLoading 
+  } = useCategories();
+
+  const products = productsData?.products || [];
+  const loading = productsLoading || categoriesLoading;
+
+  // React Query maneja automáticamente la refetch cuando cambian los filtros
+  // con debounce integrado en la configuración del queryClient
 
   // Limpiar filtros
   const clearFilters = () => {
@@ -92,7 +67,7 @@ const Home = () => {
     );
   }
 
-  if (error) {
+  if (productsError) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <motion.div 
@@ -103,9 +78,11 @@ const Home = () => {
         >
           <div className="text-destructive text-6xl mb-4">⚠️</div>
           <h2 className="text-xl font-semibold mb-2">Error</h2>
-          <p className="text-muted-foreground mb-4">{error}</p>
-          <Button onClick={() => window.location.reload()}>
-            Recargar página
+          <p className="text-muted-foreground mb-4">
+            {productsError?.message || 'Error cargando productos'}
+          </p>
+          <Button onClick={() => refetchProducts()}>
+            Reintentar
           </Button>
         </motion.div>
       </div>
@@ -113,7 +90,8 @@ const Home = () => {
   }
 
   return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <QueryErrorBoundary>
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
       <motion.div 
         className="mb-8 text-center"
@@ -285,7 +263,8 @@ const Home = () => {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+      </div>
+    </QueryErrorBoundary>
   );
 };
 
