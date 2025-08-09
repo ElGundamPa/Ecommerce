@@ -96,6 +96,88 @@ app.get('/uploads/:filename', serveImage);
 // Swagger docs
 swaggerDocs(app);
 
+/**
+ * @swagger
+ * /api/health:
+ *   get:
+ *     summary: Verificar estado de salud del servicio
+ *     description: Endpoint de health check que verifica la conectividad con MongoDB y Redis
+ *     tags: [Health]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Servicio funcionando correctamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: "ok"
+ *                 db:
+ *                   type: string
+ *                   example: "ok"
+ *                 redis:
+ *                   type: string
+ *                   enum: ["ok", "disabled"]
+ *                   example: "ok"
+ *                 cache:
+ *                   type: string
+ *                   enum: ["enabled", "disabled"]
+ *                   example: "enabled"
+ *                 time:
+ *                   type: string
+ *                   format: date-time
+ *                   example: "2024-01-15T10:30:00.000Z"
+ *                 uptime:
+ *                   type: number
+ *                   example: 3600.5
+ *                 environment:
+ *                   type: string
+ *                   example: "development"
+ *                 correlationId:
+ *                   type: string
+ *                   example: "123e4567-e89b-12d3-a456-426614174000"
+ *             examples:
+ *               healthy:
+ *                 value:
+ *                   status: "ok"
+ *                   db: "ok"
+ *                   redis: "ok"
+ *                   cache: "enabled"
+ *                   time: "2024-01-15T10:30:00.000Z"
+ *                   uptime: 3600.5
+ *                   environment: "development"
+ *                   correlationId: "123e4567-e89b-12d3-a456-426614174000"
+ *       500:
+ *         description: Error en el servicio
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: "error"
+ *                 db:
+ *                   type: string
+ *                   example: "down"
+ *                 redis:
+ *                   type: string
+ *                   example: "unknown"
+ *                 cache:
+ *                   type: string
+ *                   example: "disabled"
+ *                 error:
+ *                   type: string
+ *                   example: "Connection timeout"
+ *                 time:
+ *                   type: string
+ *                   format: date-time
+ *                 correlationId:
+ *                   type: string
+ */
 // Health check mejorado con ping a DB y Redis
 app.get('/api/health', async (req, res) => {
   try {
@@ -131,6 +213,33 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /metrics:
+ *   get:
+ *     summary: Métricas de Prometheus
+ *     description: Endpoint que expone métricas en formato Prometheus para monitoreo
+ *     tags: [Monitoring]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Métricas en formato Prometheus
+ *         content:
+ *           text/plain:
+ *             schema:
+ *               type: string
+ *             example: |
+ *               # HELP http_request_duration_ms HTTP request duration in milliseconds
+ *               # TYPE http_request_duration_ms histogram
+ *               http_request_duration_ms_bucket{method="GET",route="/api/products",status_code="200",le="50"} 10
+ *               http_request_duration_ms_bucket{method="GET",route="/api/products",status_code="200",le="100"} 25
+ *       500:
+ *         description: Error al obtener métricas
+ *         content:
+ *           text/plain:
+ *             schema:
+ *               type: string
+ */
 // Endpoint de métricas Prometheus
 app.get('/metrics', async (req, res) => {
   try {

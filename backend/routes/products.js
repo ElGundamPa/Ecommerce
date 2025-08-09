@@ -45,6 +45,89 @@ const updateSchema = {
   }).min(1),
 };
 
+/**
+ * @swagger
+ * /api/products:
+ *   get:
+ *     summary: Listar productos con paginación y filtros
+ *     description: Obtiene una lista paginada de productos con filtros opcionales por categoría, precio y búsqueda
+ *     tags: [Products]
+ *     security: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Número de página
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 12
+ *         description: Productos por página
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *         description: Filtrar por categoría
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *           maxLength: 100
+ *         description: Búsqueda por nombre o descripción
+ *       - in: query
+ *         name: minPrice
+ *         schema:
+ *           type: number
+ *           minimum: 0
+ *         description: Precio mínimo
+ *       - in: query
+ *         name: maxPrice
+ *         schema:
+ *           type: number
+ *           minimum: 0
+ *         description: Precio máximo
+ *     responses:
+ *       200:
+ *         description: Lista de productos obtenida exitosamente
+ *         headers:
+ *           X-Cache:
+ *             description: Indica si la respuesta viene del cache
+ *             schema:
+ *               type: string
+ *               enum: [HIT, MISS]
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ProductList'
+ *             examples:
+ *               success:
+ *                 value:
+ *                   success: true
+ *                   data:
+ *                     - _id: "507f1f77bcf86cd799439011"
+ *                       name: "Camiseta Premium"
+ *                       description: "Camiseta de algodón 100% orgánico"
+ *                       price: 29.99
+ *                       category: "Ropa"
+ *                       stock: 100
+ *                       image: "https://example.com/image.jpg"
+ *                       isActive: true
+ *                   pagination:
+ *                     page: 1
+ *                     limit: 12
+ *                     total: 150
+ *                     pages: 13
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       429:
+ *         $ref: '#/components/responses/RateLimitError'
+ */
 // GET /api/products - con cache de 2 minutos
 router.get('/', cacheGet, validate(listSchema), async (req, res, next) => {
   try {
@@ -70,6 +153,96 @@ router.get('/:id', cacheGet, validate({ params: Joi.object({ id: Joi.string().he
   }
 }, cacheSet(300));
 
+/**
+ * @swagger
+ * /api/products:
+ *   post:
+ *     summary: Crear nuevo producto
+ *     description: Crea un nuevo producto. Requiere autenticación y permisos de administrador.
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - description
+ *               - price
+ *               - category
+ *               - stock
+ *               - image
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 maxLength: 100
+ *                 example: "Camiseta Premium"
+ *               description:
+ *                 type: string
+ *                 maxLength: 500
+ *                 example: "Camiseta de algodón 100% orgánico"
+ *               price:
+ *                 type: number
+ *                 minimum: 0
+ *                 example: 29.99
+ *               category:
+ *                 type: string
+ *                 example: "Ropa"
+ *               stock:
+ *                 type: integer
+ *                 minimum: 0
+ *                 example: 100
+ *               image:
+ *                 type: string
+ *                 format: uri
+ *                 example: "https://example.com/image.jpg"
+ *           examples:
+ *             newProduct:
+ *               value:
+ *                 name: "Camiseta Premium"
+ *                 description: "Camiseta de algodón 100% orgánico con diseño moderno"
+ *                 price: 29.99
+ *                 category: "Ropa"
+ *                 stock: 100
+ *                 image: "https://example.com/camiseta-premium.jpg"
+ *     responses:
+ *       201:
+ *         description: Producto creado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/SuccessResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       $ref: '#/components/schemas/Product'
+ *             example:
+ *               success: true
+ *               message: "Producto creado exitosamente"
+ *               data:
+ *                 _id: "507f1f77bcf86cd799439011"
+ *                 name: "Camiseta Premium"
+ *                 description: "Camiseta de algodón 100% orgánico"
+ *                 price: 29.99
+ *                 category: "Ropa"
+ *                 stock: 100
+ *                 image: "https://example.com/image.jpg"
+ *                 isActive: true
+ *                 createdAt: "2024-01-15T10:30:00.000Z"
+ *                 updatedAt: "2024-01-15T10:30:00.000Z"
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ *       429:
+ *         $ref: '#/components/responses/RateLimitError'
+ */
 // POST /api/products
 router.post('/', requireAuth, requireAdmin, validate(createSchema), async (req, res, next) => {
   try {
