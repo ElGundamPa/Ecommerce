@@ -29,6 +29,12 @@ const { cacheMiddleware } = require('./middleware/cache');
 // Importar middleware de upload
 const { serveImage } = require('./middleware/upload');
 
+// Importar middleware de Correlation ID
+const { correlationId } = require('./middleware/correlationId');
+
+// Importar métricas de observabilidad
+const { client, metricsMiddleware, dbConnectionsActive } = require('./observability/metrics');
+
 // Importar configuración de Passport
 const passport = require('./config/passport');
 
@@ -49,12 +55,18 @@ securityMiddleware(app);
 // CORS
 app.use(cors(corsOptions));
 
+// Correlation ID (debe ir temprano en el pipeline)
+app.use(correlationId());
+
 // Cookies + CSRF (solo en rutas mutables)
 app.use(cookieParser());
 const csrfProtection = csurf({ cookie: true });
 
 // Logging
 app.use(requestLogger);
+
+// Métricas (debe ir después del logging pero antes del parsing)
+app.use(metricsMiddleware);
 
 // Parsing
 app.use(express.json({ limit: '10mb' }));
@@ -81,14 +93,42 @@ app.get('/uploads/:filename', serveImage);
 // Swagger docs
 swaggerDocs(app);
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'OK',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: process.env.NODE_ENV,
-  });
+// Health check mejorado con ping a DB
+app.get('/api/health', async (req, res) => {
+  try {
+    // Ping a la base de datos
+    await mongoose.connection.db.admin().ping();
+    
+    // Actualizar métrica de conexiones DB
+    dbConnectionsActive.set(mongoose.connection.readyState);
+    
+    res.json({
+      status: 'ok',
+      db: 'ok',
+      time: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV,
+      correlationId: req.cid
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      db: 'down',
+      error: error.message,
+      time: new Date().toISOString(),
+      correlationId: req.cid
+    });
+  }
+});
+
+// Endpoint de métricas Prometheus
+app.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', client.register.contentType);
+    res.end(await client.register.metrics());
+  } catch (error) {
+    res.status(500).end(error.message);
+  }
 });
 
 // CSRF token route (protect to generate token)
