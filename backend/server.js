@@ -6,6 +6,10 @@ const cookieParser = require('cookie-parser');
 const csurf = require('csurf');
 require('dotenv').config();
 
+// Validar variables de entorno
+const { validateEnv } = require('./config/validateEnv');
+validateEnv();
+
 // Logger
 const logger = require('./config/logger');
 
