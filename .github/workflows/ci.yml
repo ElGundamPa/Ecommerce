@@ -1,0 +1,245 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  # Job para Backend
+  backend-test:
+    runs-on: ubuntu-latest
+    name: Backend Tests
+    
+    services:
+      mongodb:
+        image: mongo:7.0
+        env:
+          MONGO_INITDB_ROOT_USERNAME: root
+          MONGO_INITDB_ROOT_PASSWORD: password
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+
+    - name: Instalar dependencias
+      run: npm ci
+
+    - name: Verificar formato de código
+      run: npm run lint --if-present
+
+    - name: Ejecutar tests
+      run: npm test -- --coverage --watchAll=false
+      env:
+        NODE_ENV: test
+        MONGODB_URI: mongodb://root:password@localhost:27017/test_ecommerce?authSource=admin
+        JWT_SECRET: test_jwt_secret_min_32_chars_for_testing
+        FRONTEND_URL: http://localhost:3000
+        REDIS_URL: redis://localhost:6379
+
+    - name: Subir coverage a Codecov
+      uses: codecov/codecov-action@v4
+      if: success()
+      with:
+        directory: ./backend
+        flags: backend
+        fail_ci_if_error: false
+
+    - name: Build backend
+      run: npm run build --if-present
+
+  # Job para Frontend
+  frontend-test:
+    runs-on: ubuntu-latest
+    name: Frontend Tests
+
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Instalar dependencias
+      run: npm ci
+
+    - name: Verificar formato de código
+      run: npm run lint --if-present
+
+    - name: Ejecutar tests
+      run: npm test -- --coverage --watchAll=false
+      env:
+        CI: true
+
+    - name: Build frontend
+      run: npm run build
+      env:
+        GENERATE_SOURCEMAP: false
+
+    - name: Subir coverage a Codecov
+      uses: codecov/codecov-action@v4
+      if: success()
+      with:
+        directory: ./frontend
+        flags: frontend
+        fail_ci_if_error: false
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: frontend-build
+        path: frontend/build/
+        retention-days: 7
+
+  # Job de integración (requiere que backend y frontend pasen)
+  integration-test:
+    runs-on: ubuntu-latest
+    name: Integration Tests
+    needs: [backend-test, frontend-test]
+    
+    services:
+      mongodb:
+        image: mongo:7.0
+        env:
+          MONGO_INITDB_ROOT_USERNAME: root
+          MONGO_INITDB_ROOT_PASSWORD: password
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+
+    - name: Instalar dependencias backend
+      run: cd backend && npm ci
+
+    - name: Verificar health check
+      run: |
+        cd backend
+        npm start &
+        SERVER_PID=$!
+        sleep 10
+        
+        # Verificar que el servidor responda
+        curl -f http://localhost:5000/api/health || exit 1
+        
+        # Verificar métricas
+        curl -f http://localhost:5000/metrics || exit 1
+        
+        # Limpiar
+        kill $SERVER_PID
+      env:
+        NODE_ENV: test
+        MONGODB_URI: mongodb://root:password@localhost:27017/integration_test?authSource=admin
+        JWT_SECRET: integration_test_jwt_secret_min_32_chars
+        FRONTEND_URL: http://localhost:3000
+
+  # Job de seguridad (análisis de dependencias)
+  security-audit:
+    runs-on: ubuntu-latest
+    name: Security Audit
+    
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Audit Backend Dependencies
+      run: |
+        cd backend
+        npm audit --audit-level=high --production
+      continue-on-error: true
+
+    - name: Audit Frontend Dependencies  
+      run: |
+        cd frontend
+        npm audit --audit-level=high --production
+      continue-on-error: true
+
+  # Job de deployment (solo en main y si todos los tests pasan)
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy to Production
+    needs: [backend-test, frontend-test, integration-test]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout código
+      uses: actions/checkout@v4
+
+    - name: Download frontend build
+      uses: actions/download-artifact@v4
+      with:
+        name: frontend-build
+        path: frontend/build/
+
+    - name: Deploy notification
+      run: |
+        echo "🚀 Ready to deploy to production!"
+        echo "Backend health check passed ✅"
+        echo "Frontend build completed ✅"
+        echo "All tests passed ✅"
+        # Aquí se agregarían los pasos reales de deployment
+        # Por ejemplo: deploy a Heroku, AWS, etc.
+
+    # Ejemplo de deployment a Heroku (descomentado si se usa)
+    # - name: Deploy to Heroku
+    #   uses: akhileshns/heroku-deploy@v3.12.14
+    #   with:
+    #     heroku_api_key: ${{secrets.HEROKU_API_KEY}}
+    #     heroku_app_name: "your-app-name"
+    #     heroku_email: "your-email@example.com"

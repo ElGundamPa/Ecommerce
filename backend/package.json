@@ -9,7 +9,9 @@
     "seed": "node scripts/seed.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "lint": "echo 'Linting backend code...' && echo 'No linter configured yet'",
+    "lint:fix": "echo 'Auto-fixing lint issues...' && echo 'No linter configured yet'"
   },
   "keywords": [
     "ecommerce",

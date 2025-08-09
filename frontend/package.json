@@ -31,7 +31,9 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "lint": "echo 'Linting frontend code...' && echo 'No linter configured yet'",
+    "lint:fix": "echo 'Auto-fixing lint issues...' && echo 'No linter configured yet'"
   },
   "eslintConfig": {
     "extends": [
