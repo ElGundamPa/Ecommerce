@@ -2,15 +2,22 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
+const cookieParser = require('cookie-parser');
+const csurf = require('csurf');
 require('dotenv').config();
+
+// Logger
+const logger = require('./config/logger');
 
 // Importar middleware de seguridad
 const { 
   securityMiddleware, 
   corsOptions, 
-  requestLogger, 
-  errorHandler 
+  requestLogger
 } = require('./middleware/security');
+
+// Error handling
+const { notFound, errorHandler } = require('./middleware/error');
 
 // Importar middleware de caché
 const { cacheMiddleware } = require('./middleware/cache');
@@ -21,6 +28,9 @@ const { serveImage } = require('./middleware/upload');
 // Importar configuración de Passport
 const passport = require('./config/passport');
 
+// Swagger docs
+const swaggerDocs = require('./config/swagger');
+
 // Importar rutas
 const productRoutes = require('./routes/products');
 const orderRoutes = require('./routes/orders');
@@ -29,54 +39,67 @@ const authRoutes = require('./routes/auth');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Aplicar middleware de seguridad
+// Seguridad base
 securityMiddleware(app);
 
-// Configurar CORS
+// CORS
 app.use(cors(corsOptions));
 
-// Middleware de logging
+// Cookies + CSRF (solo en rutas mutables)
+app.use(cookieParser());
+const csrfProtection = csurf({ cookie: true });
+
+// Logging
 app.use(requestLogger);
 
-// Middleware de parsing
+// Parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Configurar Passport
+// Passport
 app.use(passport.initialize());
 
-// Conectar a MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/ecommerce', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log('✅ Conectado a MongoDB'))
-.catch(err => console.error('❌ Error conectando a MongoDB:', err));
+// MongoDB: evitar reconectar en entorno de test (MongoMemoryServer gestiona la conexión)
+if (process.env.NODE_ENV !== 'test' && mongoose.connection.readyState === 0) {
+  mongoose
+    .connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/ecommerce', {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    })
+    .then(() => logger.info('✅ Conectado a MongoDB'))
+    .catch((err) => logger.error('❌ Error conectando a MongoDB:', err));
+}
 
-// Servir archivos estáticos
+// Static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Ruta para servir imágenes optimizadas
 app.get('/uploads/:filename', serveImage);
 
-// Rutas de la API
-app.use('/api/auth', authRoutes);
-app.use('/api/products', cacheMiddleware(300), productRoutes); // Cache por 5 minutos
-app.use('/api/orders', orderRoutes);
+// Swagger docs
+swaggerDocs(app);
 
-// Ruta de health check
+// Health check
 app.get('/api/health', (req, res) => {
-  res.json({ 
+  res.json({
     status: 'OK',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    environment: process.env.NODE_ENV
+    environment: process.env.NODE_ENV,
   });
 });
 
-// Ruta de prueba
+// CSRF token route (protect to generate token)
+app.get('/api/csrf-token', csrfProtection, (req, res) => {
+  res.json({ csrfToken: req.csrfToken() });
+});
+
+// API routes
+app.use('/api/auth', authRoutes);
+app.use('/api/products', cacheMiddleware(300), productRoutes);
+app.use('/api/orders', csrfProtection, orderRoutes);
+
+// Root
 app.get('/', (req, res) => {
-  res.json({ 
+  res.json({
     message: '🛒 API de Ecommerce MVP funcionando correctamente',
     version: '2.0.0',
     features: [
@@ -87,47 +110,41 @@ app.get('/', (req, res) => {
       'Optimización de Imágenes',
       'Rate Limiting',
       'Seguridad Mejorada',
-      'PWA Support'
+      'PWA Support',
+      'Swagger Docs',
     ],
     endpoints: {
+      docs: '/api/docs',
       auth: '/api/auth',
       products: '/api/products',
       orders: '/api/orders',
-      health: '/api/health'
-    }
+      health: '/api/health',
+    },
   });
 });
 
-// Middleware de manejo de errores mejorado
+// 404 and error
+app.use(notFound);
 app.use(errorHandler);
 
-// Ruta 404
-app.use('*', (req, res) => {
-  res.status(404).json({ 
-    success: false,
-    message: '🔍 Ruta no encontrada',
-    path: req.originalUrl
-  });
-});
-
-// Manejo de errores no capturados
+// Unhandled
 process.on('unhandledRejection', (err) => {
-  console.error('Unhandled Rejection:', err);
+  logger.error('Unhandled Rejection:', err);
   process.exit(1);
 });
-
 process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
+  logger.error('Uncaught Exception:', err);
   process.exit(1);
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
-  console.log(`📱 Frontend: http://localhost:3000`);
-  console.log(`🔧 API: http://localhost:${PORT}`);
-  console.log(`🔒 Modo: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🗄️ Base de datos: ${process.env.MONGODB_URI || 'mongodb://localhost:27017/ecommerce'}`);
+  logger.info(`🚀 Servidor ejecutándose en puerto ${PORT}`);
+  logger.info(`📱 Frontend: http://localhost:3000`);
+  logger.info(`🔧 API: http://localhost:${PORT}`);
+  logger.info(`🔒 Modo: ${process.env.NODE_ENV || 'development'}`);
+  logger.info(`🗄️ Base de datos: ${process.env.MONGODB_URI || 'mongodb://localhost:27017/ecommerce'}`);
 });
 
 module.exports = app;
+
 

@@ -1,7 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Grid, List } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  MagnifyingGlass, 
+  Squares2X2Icon, 
+  ListBulletIcon,
+  FunnelIcon,
+  XMarkIcon
+} from '@heroicons/react/24/outline';
 import ProductCard from '../components/ProductCard';
 import { productService } from '../services/api';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
+import Button from '../components/ui/Button';
+import { cn } from '../utils/cn';
 
 const Home = () => {
   const [products, setProducts] = useState([]);
@@ -77,10 +87,7 @@ const Home = () => {
   if (loading && products.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando productos...</p>
-        </div>
+        <LoadingSpinner size="xl" text="Cargando productos..." />
       </div>
     );
   }
@@ -88,40 +95,52 @@ const Home = () => {
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Error</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="btn-primary"
-          >
+        <motion.div 
+          className="text-center"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <div className="text-destructive text-6xl mb-4">⚠️</div>
+          <h2 className="text-xl font-semibold mb-2">Error</h2>
+          <p className="text-muted-foreground mb-4">{error}</p>
+          <Button onClick={() => window.location.reload()}>
             Recargar página
-          </button>
-        </div>
+          </Button>
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+      <motion.div 
+        className="mb-8 text-center"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        <h1 className="text-4xl font-bold mb-2">
           🛒 Nuestros Productos
         </h1>
-        <p className="text-gray-600">
+        <p className="text-muted-foreground text-lg">
           Descubre nuestra amplia selección de productos de calidad
         </p>
-      </div>
+      </motion.div>
 
-      {/* Filtros */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+      {/* Filters */}
+      <motion.div 
+        className="bg-card rounded-xl border p-6 mb-8"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.1 }}
+      >
         <div className="flex flex-col lg:flex-row gap-4">
-          {/* Búsqueda */}
+          {/* Search */}
           <div className="flex-1">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <MagnifyingGlass className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <input
                 type="text"
                 placeholder="Buscar productos..."
@@ -132,7 +151,7 @@ const Home = () => {
             </div>
           </div>
 
-          {/* Categoría */}
+          {/* Category */}
           <div className="lg:w-48">
             <select
               value={selectedCategory}
@@ -148,7 +167,7 @@ const Home = () => {
             </select>
           </div>
 
-          {/* Precio mínimo */}
+          {/* Min Price */}
           <div className="lg:w-32">
             <input
               type="number"
@@ -159,7 +178,7 @@ const Home = () => {
             />
           </div>
 
-          {/* Precio máximo */}
+          {/* Max Price */}
           <div className="lg:w-32">
             <input
               type="number"
@@ -170,71 +189,102 @@ const Home = () => {
             />
           </div>
 
-          {/* Botón limpiar */}
-          <button
+          {/* Clear Button */}
+          <Button
+            variant="outline"
             onClick={clearFilters}
-            className="btn-secondary lg:w-auto"
+            className="lg:w-auto"
           >
+            <XMarkIcon className="h-4 w-4 mr-2" />
             Limpiar
-          </button>
+          </Button>
         </div>
-      </div>
+      </motion.div>
 
-      {/* Controles de vista */}
-      <div className="flex justify-between items-center mb-6">
-        <div className="text-gray-600">
+      {/* View Controls */}
+      <motion.div 
+        className="flex justify-between items-center mb-6"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
+      >
+        <div className="text-muted-foreground">
           {products.length} producto{products.length !== 1 ? 's' : ''} encontrado{products.length !== 1 ? 's' : ''}
         </div>
         
         <div className="flex items-center space-x-2">
-          <button
+          <Button
+            variant={viewMode === 'grid' ? 'primary' : 'outline'}
+            size="sm"
             onClick={() => setViewMode('grid')}
-            className={`p-2 rounded ${viewMode === 'grid' ? 'bg-primary text-white' : 'bg-gray-200 text-gray-600'}`}
           >
-            <Grid size={20} />
-          </button>
-          <button
+            <Squares2X2Icon className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={viewMode === 'list' ? 'primary' : 'outline'}
+            size="sm"
             onClick={() => setViewMode('list')}
-            className={`p-2 rounded ${viewMode === 'list' ? 'bg-primary text-white' : 'bg-gray-200 text-gray-600'}`}
           >
-            <List size={20} />
-          </button>
+            <ListBulletIcon className="h-4 w-4" />
+          </Button>
         </div>
-      </div>
+      </motion.div>
 
-      {/* Lista de productos */}
-      {loading ? (
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-gray-600">Aplicando filtros...</p>
-        </div>
-      ) : products.length === 0 ? (
-        <div className="text-center py-12">
-          <div className="text-gray-400 text-6xl mb-4">🔍</div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">
-            No se encontraron productos
-          </h3>
-          <p className="text-gray-600 mb-4">
-            Intenta ajustar los filtros de búsqueda
-          </p>
-          <button
-            onClick={clearFilters}
-            className="btn-primary"
+      {/* Products List */}
+      <AnimatePresence mode="wait">
+        {loading ? (
+          <motion.div 
+            key="loading"
+            className="text-center py-8"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
           >
-            Limpiar filtros
-          </button>
-        </div>
-      ) : (
-        <div className={`grid gap-6 ${
-          viewMode === 'grid' 
-            ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' 
-            : 'grid-cols-1'
-        }`}>
-          {products.map(product => (
-            <ProductCard key={product._id} product={product} />
-          ))}
-        </div>
-      )}
+            <LoadingSpinner text="Aplicando filtros..." />
+          </motion.div>
+        ) : products.length === 0 ? (
+          <motion.div 
+            key="empty"
+            className="text-center py-12"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+          >
+            <div className="text-muted-foreground text-6xl mb-4">🔍</div>
+            <h3 className="text-xl font-semibold mb-2">
+              No se encontraron productos
+            </h3>
+            <p className="text-muted-foreground mb-4">
+              Intenta ajustar los filtros de búsqueda
+            </p>
+            <Button onClick={clearFilters}>
+              Limpiar filtros
+            </Button>
+          </motion.div>
+        ) : (
+          <motion.div 
+            key="products"
+            className={cn(
+              "grid gap-6",
+              viewMode === 'grid' 
+                ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' 
+                : 'grid-cols-1'
+            )}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            {products.map((product, index) => (
+              <ProductCard 
+                key={product._id} 
+                product={product} 
+                delay={index * 0.1}
+              />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

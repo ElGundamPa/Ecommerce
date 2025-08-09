@@ -1,177 +1,122 @@
 const express = require('express');
-const { body, validationResult } = require('express-validator');
-const Product = require('../models/Product');
+const { validate, Joi } = require('../middleware/validate');
+const { requireAuth, requireAdmin } = require('../middleware/auth');
+const productService = require('../services/productService');
+const logger = require('../config/logger');
 
 const router = express.Router();
 
-// GET /api/products - Obtener todos los productos con paginación
-router.get('/', async (req, res) => {
+// Schemas
+const listSchema = {
+  query: Joi.object({
+    category: Joi.string().optional(),
+    minPrice: Joi.number().min(0).optional(),
+    maxPrice: Joi.number().min(0).optional(),
+    search: Joi.string().max(100).optional(),
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(100).default(12),
+    sort: Joi.string().valid('createdAt', 'price', 'name').default('createdAt'),
+    order: Joi.string().valid('asc', 'desc').default('desc'),
+  }),
+};
+
+const createSchema = {
+  body: Joi.object({
+    name: Joi.string().max(100).required(),
+    description: Joi.string().max(500).required(),
+    price: Joi.number().min(0).required(),
+    image: Joi.string().uri().required(),
+    stock: Joi.number().integer().min(0).required(),
+    category: Joi.string().required(),
+  }),
+};
+
+const idParam = { params: Joi.object({ id: Joi.string().hex().length(24).required() }) };
+const updateSchema = {
+  ...idParam,
+  body: Joi.object({
+    name: Joi.string().max(100),
+    description: Joi.string().max(500),
+    price: Joi.number().min(0),
+    image: Joi.string().uri(),
+    stock: Joi.number().integer().min(0),
+    category: Joi.string(),
+  }).min(1),
+};
+
+// GET /api/products
+router.get('/', validate(listSchema), async (req, res, next) => {
   try {
-    const { 
-      category, 
-      minPrice, 
-      maxPrice, 
-      search, 
-      page = 1, 
-      limit = 12, 
-      sort = 'createdAt',
-      order = 'desc'
-    } = req.query;
-    
-    let query = {};
-    
-    // Filtro por categoría
-    if (category) {
-      query.category = category;
-    }
-    
-    // Filtro por precio
-    if (minPrice || maxPrice) {
-      query.price = {};
-      if (minPrice) query.price.$gte = parseFloat(minPrice);
-      if (maxPrice) query.price.$lte = parseFloat(maxPrice);
-    }
-    
-    // Búsqueda por texto
-    if (search) {
-      query.$text = { $search: search };
-    }
-    
-    // Configuración de paginación
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
-    const skip = (pageNum - 1) * limitNum;
-    
-    // Configuración de ordenamiento
-    const sortOrder = order === 'asc' ? 1 : -1;
-    const sortObj = { [sort]: sortOrder };
-    
-    // Ejecutar consulta con paginación
-    const [products, total] = await Promise.all([
-      Product.find(query)
-        .sort(sortObj)
-        .skip(skip)
-        .limit(limitNum)
-        .lean(),
-      Product.countDocuments(query)
-    ]);
-    
-    // Calcular información de paginación
-    const totalPages = Math.ceil(total / limitNum);
-    const hasNextPage = pageNum < totalPages;
-    const hasPrevPage = pageNum > 1;
-    
-    res.json({
-      success: true,
-      data: products,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
-        totalPages,
-        hasNextPage,
-        hasPrevPage,
-        nextPage: hasNextPage ? pageNum + 1 : null,
-        prevPage: hasPrevPage ? pageNum - 1 : null
-      }
-    });
+    const result = await productService.listProducts(req.query);
+    res.json({ success: true, data: result.products, pagination: result.pagination });
   } catch (error) {
-    console.error('Error obteniendo productos:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error interno del servidor',
-      error: error.message
-    });
+    logger.error('Error obteniendo productos', { error: error.message });
+    next(error);
   }
 });
 
-// GET /api/products/:id - Obtener producto por ID
-router.get('/:id', async (req, res) => {
+// GET /api/products/:id
+router.get('/:id', validate({ params: Joi.object({ id: Joi.string().hex().length(24).required() }) }), async (req, res, next) => {
   try {
-    const product = await Product.findById(req.params.id);
-    
+    const product = await productService.getProductById(req.params.id);
     if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: 'Producto no encontrado'
-      });
+      return res.status(404).json({ success: false, message: 'Producto no encontrado' });
     }
-    
-    res.json({
-      success: true,
-      data: product
-    });
+    res.json({ success: true, data: product });
   } catch (error) {
-    console.error('Error obteniendo producto:', error);
-    
-    if (error.kind === 'ObjectId') {
-      return res.status(400).json({
-        success: false,
-        message: 'ID de producto inválido'
-      });
-    }
-    
-    res.status(500).json({
-      success: false,
-      message: 'Error interno del servidor',
-      error: error.message
-    });
+    logger.error('Error obteniendo producto', { error: error.message });
+    next(error);
   }
 });
 
-// POST /api/products - Crear nuevo producto (para administración)
-router.post('/', [
-  body('name').trim().isLength({ min: 1, max: 100 }).withMessage('El nombre es requerido y debe tener máximo 100 caracteres'),
-  body('description').trim().isLength({ min: 1, max: 500 }).withMessage('La descripción es requerida y debe tener máximo 500 caracteres'),
-  body('price').isFloat({ min: 0 }).withMessage('El precio debe ser un número positivo'),
-  body('image').trim().isURL().withMessage('La imagen debe ser una URL válida'),
-  body('stock').isInt({ min: 0 }).withMessage('El stock debe ser un número entero positivo'),
-  body('category').isIn(['Electrónicos', 'Ropa', 'Hogar', 'Deportes', 'Libros', 'Otros']).withMessage('Categoría inválida')
-], async (req, res) => {
+// POST /api/products
+router.post('/', requireAuth, requireAdmin, validate(createSchema), async (req, res, next) => {
   try {
-    // Verificar errores de validación
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Datos de entrada inválidos',
-        errors: errors.array()
-      });
-    }
-    
-    const product = new Product(req.body);
-    await product.save();
-    
-    res.status(201).json({
-      success: true,
-      message: 'Producto creado exitosamente',
-      data: product
-    });
+    const product = await productService.createProduct(req.body);
+    res.status(201).json({ success: true, message: 'Producto creado exitosamente', data: product });
   } catch (error) {
-    console.error('Error creando producto:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error interno del servidor',
-      error: error.message
-    });
+    logger.error('Error creando producto', { error: error.message });
+    next(error);
   }
 });
 
-// GET /api/products/categories - Obtener categorías disponibles
-router.get('/categories/list', async (req, res) => {
+// GET /api/products/categories/list
+router.get('/categories/list', async (req, res, next) => {
   try {
-    const categories = await Product.distinct('category');
-    res.json({
-      success: true,
-      data: categories
-    });
+    const categories = await productService.listCategories();
+    res.json({ success: true, data: categories });
   } catch (error) {
-    console.error('Error obteniendo categorías:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error interno del servidor',
-      error: error.message
-    });
+    logger.error('Error obteniendo categorías', { error: error.message });
+    next(error);
+  }
+});
+
+// PUT /api/products/:id
+router.put('/:id', requireAuth, requireAdmin, validate(updateSchema), async (req, res, next) => {
+  try {
+    const existing = await productService.getProductById(req.params.id);
+    if (!existing) return res.status(404).json({ success: false, message: 'Producto no encontrado' });
+
+    Object.assign(existing, req.body);
+    await existing.save();
+    res.json({ success: true, message: 'Producto actualizado', data: existing });
+  } catch (error) {
+    logger.error('Error actualizando producto', { error: error.message });
+    next(error);
+  }
+});
+
+// DELETE /api/products/:id
+router.delete('/:id', requireAuth, requireAdmin, validate(idParam), async (req, res, next) => {
+  try {
+    const existing = await productService.getProductById(req.params.id);
+    if (!existing) return res.status(404).json({ success: false, message: 'Producto no encontrado' });
+
+    await existing.deleteOne();
+    res.json({ success: true, message: 'Producto eliminado' });
+  } catch (error) {
+    logger.error('Error eliminando producto', { error: error.message });
+    next(error);
   }
 });
 
