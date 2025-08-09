@@ -3,6 +3,7 @@ const { validate, Joi } = require('../middleware/validate');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const productService = require('../services/productService');
 const logger = require('../config/logger');
+const { cacheGet, cacheSet, invalidateProductCache, invalidateProductByIdCache } = require('../cache/cacheMiddleware');
 
 const router = express.Router();
 
@@ -44,8 +45,8 @@ const updateSchema = {
   }).min(1),
 };
 
-// GET /api/products
-router.get('/', validate(listSchema), async (req, res, next) => {
+// GET /api/products - con cache de 2 minutos
+router.get('/', cacheGet, validate(listSchema), async (req, res, next) => {
   try {
     const result = await productService.listProducts(req.query);
     res.json({ success: true, data: result.products, pagination: result.pagination });
@@ -53,10 +54,10 @@ router.get('/', validate(listSchema), async (req, res, next) => {
     logger.error('Error obteniendo productos', { error: error.message });
     next(error);
   }
-});
+}, cacheSet(120));
 
-// GET /api/products/:id
-router.get('/:id', validate({ params: Joi.object({ id: Joi.string().hex().length(24).required() }) }), async (req, res, next) => {
+// GET /api/products/:id - con cache de 5 minutos
+router.get('/:id', cacheGet, validate({ params: Joi.object({ id: Joi.string().hex().length(24).required() }) }), async (req, res, next) => {
   try {
     const product = await productService.getProductById(req.params.id);
     if (!product) {
@@ -67,12 +68,16 @@ router.get('/:id', validate({ params: Joi.object({ id: Joi.string().hex().length
     logger.error('Error obteniendo producto', { error: error.message });
     next(error);
   }
-});
+}, cacheSet(300));
 
 // POST /api/products
 router.post('/', requireAuth, requireAdmin, validate(createSchema), async (req, res, next) => {
   try {
     const product = await productService.createProduct(req.body);
+    
+    // Invalidar cache de productos
+    await invalidateProductCache();
+    
     res.status(201).json({ success: true, message: 'Producto creado exitosamente', data: product });
   } catch (error) {
     logger.error('Error creando producto', { error: error.message });
@@ -80,8 +85,8 @@ router.post('/', requireAuth, requireAdmin, validate(createSchema), async (req, 
   }
 });
 
-// GET /api/products/categories/list
-router.get('/categories/list', async (req, res, next) => {
+// GET /api/products/categories/list - con cache de 10 minutos
+router.get('/categories/list', cacheGet, async (req, res, next) => {
   try {
     const categories = await productService.listCategories();
     res.json({ success: true, data: categories });
@@ -89,7 +94,7 @@ router.get('/categories/list', async (req, res, next) => {
     logger.error('Error obteniendo categorías', { error: error.message });
     next(error);
   }
-});
+}, cacheSet(600));
 
 // PUT /api/products/:id
 router.put('/:id', requireAuth, requireAdmin, validate(updateSchema), async (req, res, next) => {
@@ -99,6 +104,10 @@ router.put('/:id', requireAuth, requireAdmin, validate(updateSchema), async (req
 
     Object.assign(existing, req.body);
     await existing.save();
+    
+    // Invalidar cache del producto específico y listados
+    await invalidateProductByIdCache(req.params.id);
+    
     res.json({ success: true, message: 'Producto actualizado', data: existing });
   } catch (error) {
     logger.error('Error actualizando producto', { error: error.message });
@@ -113,6 +122,10 @@ router.delete('/:id', requireAuth, requireAdmin, validate(idParam), async (req, 
     if (!existing) return res.status(404).json({ success: false, message: 'Producto no encontrado' });
 
     await existing.deleteOne();
+    
+    // Invalidar cache del producto específico y listados
+    await invalidateProductByIdCache(req.params.id);
+    
     res.json({ success: true, message: 'Producto eliminado' });
   } catch (error) {
     logger.error('Error eliminando producto', { error: error.message });

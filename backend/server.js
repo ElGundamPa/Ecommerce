@@ -35,6 +35,9 @@ const { correlationId } = require('./middleware/correlationId');
 // Importar métricas de observabilidad
 const { client, metricsMiddleware, dbConnectionsActive } = require('./observability/metrics');
 
+// Importar Redis para healthcheck
+const { isRedisAvailable } = require('./cache/redis');
+
 // Importar configuración de Passport
 const passport = require('./config/passport');
 
@@ -93,11 +96,14 @@ app.get('/uploads/:filename', serveImage);
 // Swagger docs
 swaggerDocs(app);
 
-// Health check mejorado con ping a DB
+// Health check mejorado con ping a DB y Redis
 app.get('/api/health', async (req, res) => {
   try {
     // Ping a la base de datos
     await mongoose.connection.db.admin().ping();
+    
+    // Verificar Redis (opcional)
+    const redisAvailable = await isRedisAvailable();
     
     // Actualizar métrica de conexiones DB
     dbConnectionsActive.set(mongoose.connection.readyState);
@@ -105,6 +111,8 @@ app.get('/api/health', async (req, res) => {
     res.json({
       status: 'ok',
       db: 'ok',
+      redis: redisAvailable ? 'ok' : 'disabled',
+      cache: redisAvailable ? 'enabled' : 'disabled',
       time: new Date().toISOString(),
       uptime: process.uptime(),
       environment: process.env.NODE_ENV,
@@ -114,6 +122,8 @@ app.get('/api/health', async (req, res) => {
     res.status(500).json({
       status: 'error',
       db: 'down',
+      redis: 'unknown',
+      cache: 'disabled',
       error: error.message,
       time: new Date().toISOString(),
       correlationId: req.cid
