@@ -32,5 +32,27 @@ const validate = (schemas = {}) => {
   };
 };
 
-module.exports = { validate, Joi };
+// Versión simple para validar una sola propiedad (útil para casos simples)
+const validateSingle = (schema, property = 'body') => {
+  return (req, res, next) => {
+    const { error, value } = schema.validate(req[property], { 
+      abortEarly: false, 
+      stripUnknown: true 
+    });
+    
+    if (error) {
+      return next(new AppError('Datos de entrada inválidos', StatusCodes.BAD_REQUEST, 
+        error.details.map(detail => ({
+          field: detail.path.join('.'),
+          message: detail.message
+        }))
+      ));
+    }
+    
+    req[property] = value;
+    next();
+  };
+};
+
+module.exports = { validate, validateSingle, Joi };
 

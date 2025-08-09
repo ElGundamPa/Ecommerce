@@ -20,22 +20,22 @@ const createRateLimit = (windowMs, max, message) => {
 };
 
 // Rate limiters específicos
-const authLimiter = createRateLimit(
-  15 * 60 * 1000, // 15 minutos
-  5, // 5 intentos
-  'Demasiados intentos de autenticación. Intenta en 15 minutos.'
-);
-
-const apiLimiter = createRateLimit(
+const globalLimiter = createRateLimit(
   15 * 60 * 1000, // 15 minutos
   100, // 100 requests
-  'Demasiadas solicitudes a la API. Intenta en 15 minutos.'
+  'Demasiadas solicitudes. Intenta en 15 minutos.'
+);
+
+const authLoginLimiter = createRateLimit(
+  15 * 60 * 1000, // 15 minutos
+  20, // 20 intentos de login
+  'Demasiados intentos de login. Intenta en 15 minutos.'
 );
 
 const orderLimiter = createRateLimit(
-  60 * 60 * 1000, // 1 hora
-  10, // 10 pedidos por hora
-  'Demasiados pedidos. Intenta en 1 hora.'
+  15 * 60 * 1000, // 15 minutos
+  50, // 50 requests de orders
+  'Demasiadas solicitudes de pedidos. Intenta en 15 minutos.'
 );
 
 // Configuración de CORS
@@ -65,20 +65,39 @@ const corsOptions = {
 
 // Middleware de seguridad
 const securityMiddleware = (app) => {
+  // CSP dinámico basado en variables de entorno
+  const cspConnectSrc = ["'self'"];
+  if (process.env.FRONTEND_URL) {
+    cspConnectSrc.push(process.env.FRONTEND_URL);
+  }
+  if (process.env.CSP_CONNECT_EXTRA) {
+    cspConnectSrc.push(process.env.CSP_CONNECT_EXTRA);
+  }
+
   // Helmet para headers de seguridad
   app.use(helmet({
     contentSecurityPolicy: {
+      useDefaults: true,
       directives: {
-        defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-        fontSrc: ["'self'", "https://fonts.gstatic.com"],
-        imgSrc: ["'self'", "data:", "https:"],
-        scriptSrc: ["'self'"],
-        connectSrc: ["'self'", "https://api.example.com"]
-      }
+        "default-src": ["'self'"],
+        "img-src": ["'self'", "data:", "https:"],
+        "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        "font-src": ["'self'", "https://fonts.gstatic.com"],
+        "script-src": ["'self'"],
+        "connect-src": cspConnectSrc,
+      },
     },
     crossOriginEmbedderPolicy: false
   }));
+
+  // HSTS solo en producción
+  if (process.env.NODE_ENV === 'production') {
+    app.use(helmet.hsts({ 
+      maxAge: 15552000, // 180 días
+      includeSubDomains: true,
+      preload: true
+    }));
+  }
 
   // Compresión gzip
   app.use(compression());
@@ -94,11 +113,11 @@ const securityMiddleware = (app) => {
     whitelist: ['category', 'price', 'search'] // Parámetros permitidos
   }));
 
-  // Rate limiting global
-  app.use('/api/', apiLimiter);
+  // Rate limiting global (aplicar primero)
+  app.use(globalLimiter);
   
-  // Rate limiting específico para autenticación
-  app.use('/api/auth/', authLimiter);
+  // Rate limiting específico para login
+  app.use('/api/auth/login', authLoginLimiter);
   
   // Rate limiting para pedidos
   app.use('/api/orders', orderLimiter);
@@ -204,7 +223,7 @@ module.exports = {
   validateRequest,
   requestLogger,
   errorHandler,
-  authLimiter,
-  apiLimiter,
+  globalLimiter,
+  authLoginLimiter,
   orderLimiter
 };
