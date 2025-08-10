@@ -10,7 +10,7 @@ import {
   X,
   Search,
   User
-} from '@heroicons/react/24/outline';
+} from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAccessibility } from '../contexts/AccessibilityContext';

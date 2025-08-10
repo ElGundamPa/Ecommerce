@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CreditCard } from '@radix-ui/react-icons';
+import { CreditCard } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { orderService, utilService } from '../services/api';
 import { z } from 'zod';

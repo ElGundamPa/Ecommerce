@@ -5,10 +5,8 @@ import {
   ShoppingCart, 
   Eye, 
   Heart,
-  Star,
-  StarIcon
-} from '@heroicons/react/24/outline';
-import { StarIcon as StarSolid } from '@heroicons/react/24/solid';
+  Star
+} from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { utilService } from '../services/api';
 import { Card, CardContent, CardFooter } from './ui/Card';
@@ -153,11 +151,11 @@ const ProductCard = ({ product, delay = 0 }) => {
         <div className="flex items-center mb-3">
           <div className="flex items-center">
             {[...Array(5)].map((_, i) => (
-              <StarSolid 
+              <Star 
                 key={i} 
                 className={cn(
                   "h-4 w-4",
-                  i < 4 ? "text-yellow-400" : "text-muted"
+                  i < 4 ? "text-yellow-400 fill-current" : "text-muted"
                 )} 
               />
             ))}

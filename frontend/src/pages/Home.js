@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  MagnifyingGlass, 
-  Squares2X2Icon, 
-  ListBulletIcon,
-  FunnelIcon,
-  XMarkIcon
-} from '@heroicons/react/24/outline';
+  Search, 
+  Grid, 
+  List,
+  Filter,
+  X
+} from 'lucide-react';
 import ProductCard from '../components/ProductCard';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Button from '../components/ui/Button';
@@ -41,9 +41,11 @@ const Home = () => {
   } = useProducts(filters);
 
   const { 
-    data: categories, 
+    data: categoriesData, 
     isLoading: categoriesLoading 
   } = useCategories();
+
+  const categoryList = categoriesData || [];
 
   const products = productsData?.products || [];
   const loading = productsLoading || categoriesLoading;
@@ -118,7 +120,7 @@ const Home = () => {
           {/* Search */}
           <div className="flex-1">
             <div className="relative">
-              <MagnifyingGlass className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <input
                 type="text"
                 placeholder="Buscar productos..."
@@ -137,7 +139,7 @@ const Home = () => {
               className="input-field"
             >
               <option value="">Todas las categorías</option>
-              {categories.map(category => (
+              {categoryList.map(category => (
                 <option key={category} value={category}>
                   {category}
                 </option>
@@ -173,7 +175,7 @@ const Home = () => {
             onClick={clearFilters}
             className="lg:w-auto"
           >
-            <XMarkIcon className="h-4 w-4 mr-2" />
+            <X className="h-4 w-4 mr-2" />
             Limpiar
           </Button>
         </div>
@@ -196,14 +198,14 @@ const Home = () => {
             size="sm"
             onClick={() => setViewMode('grid')}
           >
-            <Squares2X2Icon className="h-4 w-4" />
+            <Grid className="h-4 w-4" />
           </Button>
           <Button
             variant={viewMode === 'list' ? 'primary' : 'outline'}
             size="sm"
             onClick={() => setViewMode('list')}
           >
-            <ListBulletIcon className="h-4 w-4" />
+            <List className="h-4 w-4" />
           </Button>
         </div>
       </motion.div>
